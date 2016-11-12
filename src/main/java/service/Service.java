@@ -58,18 +58,20 @@ public class Service {
         for (TrainPosition pos : positionsList) {
             if (trainDiff.get(pos.TrainId) != null &&
                     !trainDiff.get(pos.TrainId).DestinationStationCode.equals(pos.DestinationStationCode)){
-                writeToInflux(pos.DestinationStationCode, pos.DirectionNum,
+                writeToInflux(pos.TrainId, pos.DestinationStationCode, trainDiff.get(pos.TrainId).DestinationStationCode, pos.DirectionNum,
                         System.currentTimeMillis() - trainDiff.get(pos.TrainId).time);
             }
         }
 
-        //train pop in and out of existence
+        //train pop in and out of existence so replace only when things change
         for (TrainPosition pos : positionsList) {
             if (trainDiff.get(pos.TrainId) == null ||//new train
                     !trainDiff.get(pos.TrainId).DestinationStationCode.equals(pos.DestinationStationCode)) { //new station
-                trainDiff.put(pos.TrainId, new TrainMetaData(pos.TrainId));
+                System.out.println("Overriding or adding" + pos.TrainId);
+                trainDiff.put(pos.TrainId, new TrainMetaData(pos.DestinationStationCode));
             }
         }
+        System.out.println(trainDiff);
     }
 
     public void setNewTrainDiff(List<TrainPosition> positions) {
@@ -90,6 +92,11 @@ public class Service {
         public TrainMetaData(String destinationStationCode, long time) {
             this.DestinationStationCode = destinationStationCode;
             this.time = time;
+        }
+
+        @Override
+        public String toString() {
+            return  DestinationStationCode + " : " + time;
         }
     }
 
@@ -131,8 +138,9 @@ public class Service {
         return null;
     }
 
-    public void writeToInflux(String station, int directionNum, long time) {
-        System.out.println("Writing to influx: " + station + " direction " + directionNum + " took " + time);
+    public void writeToInflux(String trainId, String station, String fromStation, int directionNum, long time) {
+        System.out.println("Writing to influx: train:"+trainId + " " + station +
+                " direction " + directionNum + " took " + time);
 
         BatchPoints batchPoints = BatchPoints
                 .database("db1")
