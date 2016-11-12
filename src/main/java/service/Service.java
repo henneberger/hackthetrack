@@ -30,9 +30,9 @@ public class Service {
 
     public Service(InfluxDB influxDB) {
         this.influxDB = influxDB;
+        influxDB.createDatabase("db2");
     }
 
-    public Positions old;
     public Map<String, TrainMetaData> trainDiff = new HashMap<>();
     public void diffStations(Positions p) {
         List<TrainPosition> positionsList = p.TrainPositions.stream() //clean up
@@ -41,24 +41,28 @@ public class Service {
                 .filter(s -> s.TrainId != null)
                 .collect(Collectors.toList());
 
-        if (old == null) {//first run, write all
-            old = p;
-            for (TrainPosition pos : positionsList) {
-                System.out.println("adding pos" + pos.TrainId);
-                trainDiff.put(pos.TrainId, new TrainMetaData(pos.DestinationStationCode));
-            }
+        if (trainDiff.size() == 0) {//first run, write all
+            setNewTrainDiff(positionsList);
+
             return;
         }
 
         for (TrainPosition pos : positionsList) {
             if (trainDiff.get(pos.TrainId) != null && !trainDiff.get(pos.TrainId).DestinationStationCode.equals(pos.DestinationStationCode)){
-                System.out.println("Found an arrival: " + pos.TrainId +" at "+ pos.DestinationStationCode);
                 writeToInflux(pos.DestinationStationCode, pos.DirectionNum, System.currentTimeMillis() - trainDiff.get(pos.TrainId).time);
             }
-            //bug, if the train goes away then clear it out.
         }
 
+        setNewTrainDiff(positionsList);
     }
+
+    public void setNewTrainDiff(List<TrainPosition> positions) {
+        trainDiff = new HashMap<>();
+        for (TrainPosition pos : positions) {
+            trainDiff.put(pos.TrainId, new TrainMetaData(pos.DestinationStationCode));
+        }
+    }
+
     class TrainMetaData {
         String DestinationStationCode;
         long time = System.currentTimeMillis();
@@ -107,6 +111,8 @@ public class Service {
     }
 
     public void writeToInflux(String station, int directionNum, long time) {
+        System.out.println("Writing to influx: " + station + " direction " + directionNum + " took " + time);
+
         BatchPoints batchPoints = BatchPoints
                 .database("db1")
                 .tag("async", "true")
@@ -114,11 +120,11 @@ public class Service {
                 .consistency(InfluxDB.ConsistencyLevel.ALL)
                 .build();
 
-        Point point2 = Point.measurement("disk")
+        Point point2 = Point.measurement("station")
                 .time(System.currentTimeMillis(), TimeUnit.MILLISECONDS)
                 .addField("station", station)
                 .addField("direction", directionNum)
-                .addField("time", time)
+                .addField("t", time)
                 .build();
         batchPoints.point(point2);
         influxDB.write(batchPoints);
