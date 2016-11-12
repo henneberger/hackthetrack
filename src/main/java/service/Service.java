@@ -28,8 +28,12 @@ import org.influxdb.dto.Point;
 public class Service {
     InfluxDB influxDB = null;
 
+    public Service(InfluxDB influxDB) {
+        this.influxDB = influxDB;
+    }
+
     public Positions old;
-    public Map<String, String> trainDiff = new HashMap<>();
+    public Map<String, TrainMetaData> trainDiff = new HashMap<>();
     public void diffStations(Positions p) {
         List<TrainPosition> positionsList = p.TrainPositions.stream() //clean up
                 .filter(s -> s.LineCode != null)
@@ -41,21 +45,27 @@ public class Service {
             old = p;
             for (TrainPosition pos : positionsList) {
                 System.out.println("adding pos" + pos.TrainId);
-                trainDiff.put(pos.TrainId, pos.DestinationStationCode);
+                trainDiff.put(pos.TrainId, new TrainMetaData(pos.DestinationStationCode));
             }
             return;
         }
 
         for (TrainPosition pos : positionsList) {
-            
+            if (trainDiff.get(pos.TrainId) != null && !trainDiff.get(pos.TrainId).DestinationStationCode.equals(pos.DestinationStationCode)){
+                System.out.println("Found an arrival: " + pos.TrainId +" at "+ pos.DestinationStationCode);
+                writeToInflux(pos.DestinationStationCode, pos.DirectionNum, System.currentTimeMillis() - trainDiff.get(pos.TrainId).time);
+            }
+            //bug, if the train goes away then clear it out.
         }
 
+    }
+    class TrainMetaData {
+        String DestinationStationCode;
+        long time = System.currentTimeMillis();
 
-
-
-
-
-        writeToInflux("1", 0);
+        public TrainMetaData(String destinationStationCode) {
+            this.DestinationStationCode = destinationStationCode;
+        }
     }
 
     public Positions getPositions(boolean live)  {
@@ -85,7 +95,10 @@ public class Service {
             HttpResponse response = httpclient.execute(request);
             HttpEntity entity = response.getEntity();
             if (entity != null) {
-                return EntityUtils.toString(entity);
+                String s = EntityUtils.toString(entity);
+                System.out.println(s);
+                System.out.println("Http call returned.");
+                return s;
             }
         } catch (Exception e) {
             e.printStackTrace();
@@ -93,13 +106,7 @@ public class Service {
         return null;
     }
 
-    public void connectToInflux() {
-        System.out.println("Connecting to influx");
-        influxDB = InfluxDBFactory.connect("http://192.168.99.100:8086", "root", "somepassword");
-        System.out.println("Connected");
-    }
-
-    public void writeToInflux(String station, long time) {
+    public void writeToInflux(String station, int directionNum, long time) {
         BatchPoints batchPoints = BatchPoints
                 .database("db1")
                 .tag("async", "true")
@@ -109,8 +116,9 @@ public class Service {
 
         Point point2 = Point.measurement("disk")
                 .time(System.currentTimeMillis(), TimeUnit.MILLISECONDS)
-                .addField("used", 80L)
-                .addField("free", 1L)
+                .addField("station", station)
+                .addField("direction", directionNum)
+                .addField("time", time)
                 .build();
         batchPoints.point(point2);
         influxDB.write(batchPoints);
