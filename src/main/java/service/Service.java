@@ -2,6 +2,7 @@ package service;
 
 import java.io.IOException;
 import java.net.URI;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -43,7 +44,6 @@ public class Service {
 
         if (trainDiff.size() == 0) {//first run, write all
             setNewTrainDiff(positionsList);
-
             return;
         }
 
@@ -53,7 +53,16 @@ public class Service {
             }
         }
 
-        setNewTrainDiff(positionsList);
+        List<String> seen = positionsList.stream().map(s->s.TrainId).collect(Collectors.toList());
+        Map<String, TrainMetaData> temp = new HashMap<>();
+        for (String dest : seen) {
+            if (trainDiff.get(dest) != null) {
+                temp.put(dest, trainDiff.get(dest));
+            } else {
+                temp.put(dest, new TrainMetaData(dest));
+            }
+        }
+        trainDiff = temp;
     }
 
     public void setNewTrainDiff(List<TrainPosition> positions) {
@@ -120,7 +129,7 @@ public class Service {
                 .consistency(InfluxDB.ConsistencyLevel.ALL)
                 .build();
 
-        Point point2 = Point.measurement("station")
+        Point point2 = Point.measurement("station2")
                 .time(System.currentTimeMillis(), TimeUnit.MILLISECONDS)
                 .addField("station", station)
                 .addField("direction", directionNum)
