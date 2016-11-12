@@ -19,6 +19,7 @@ import org.influxdb.dto.BatchPoints;
 import org.influxdb.dto.Point;
 
 public class App {
+    public static boolean live = false;
 
     public static void main(String[] args) {
 
@@ -29,7 +30,7 @@ public class App {
         Runnable runnabledelayedTask = new Runnable() {
             public void run() {
                 System.out.println("Getting locations");
-                Positions p = s.getPositions(false);
+                Positions p = s.getPositions(live);
 
                 if(p == null) {
                     System.out.println("Something weird happened");

@@ -2,8 +2,13 @@ package service;
 
 import java.io.IOException;
 import java.net.URI;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 import model.Positions;
+import model.TrainPosition;
 import org.apache.http.HttpEntity;
 import org.apache.http.HttpResponse;
 import org.apache.http.client.HttpClient;
@@ -23,7 +28,33 @@ import org.influxdb.dto.Point;
 public class Service {
     InfluxDB influxDB = null;
 
+    public Positions old;
+    public Map<String, String> trainDiff = new HashMap<>();
     public void diffStations(Positions p) {
+        List<TrainPosition> positionsList = p.TrainPositions.stream() //clean up
+                .filter(s -> s.LineCode != null)
+                .filter(s -> s.DestinationStationCode != null)
+                .filter(s -> s.TrainId != null)
+                .collect(Collectors.toList());
+
+        if (old == null) {//first run, write all
+            old = p;
+            for (TrainPosition pos : positionsList) {
+                System.out.println("adding pos" + pos.TrainId);
+                trainDiff.put(pos.TrainId, pos.DestinationStationCode);
+            }
+            return;
+        }
+
+        for (TrainPosition pos : positionsList) {
+            
+        }
+
+
+
+
+
+
         writeToInflux("1", 0);
     }
 
