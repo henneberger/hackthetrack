@@ -19,7 +19,6 @@ import org.apache.http.impl.client.HttpClients;
 import org.apache.http.util.EntityUtils;
 import org.codehaus.jackson.map.ObjectMapper;
 import org.influxdb.InfluxDB;
-import org.influxdb.InfluxDBFactory;
 import org.influxdb.dto.BatchPoints;
 import org.influxdb.dto.Point;
 
@@ -31,7 +30,6 @@ public class Service {
 
     public Service(InfluxDB influxDB) {
         this.influxDB = influxDB;
-        influxDB.createDatabase("db2");
     }
 
     public Map<String, TrainMetaData> trainDiff = new HashMap<>();
@@ -47,22 +45,31 @@ public class Service {
             return;
         }
 
+        List<String> toRemove = new ArrayList<>();
+        for (Map.Entry<String, TrainMetaData> entry : trainDiff.entrySet()) { //dropout
+            if (System.currentTimeMillis() - entry.getValue().time > 30*60*1000) { //30 minutes
+                toRemove.add(entry.getKey());
+            }
+        }
+        for (String r : toRemove) {
+            trainDiff.remove(r);
+        }
+
         for (TrainPosition pos : positionsList) {
-            if (trainDiff.get(pos.TrainId) != null && !trainDiff.get(pos.TrainId).DestinationStationCode.equals(pos.DestinationStationCode)){
-                writeToInflux(pos.DestinationStationCode, pos.DirectionNum, System.currentTimeMillis() - trainDiff.get(pos.TrainId).time);
+            if (trainDiff.get(pos.TrainId) != null &&
+                    !trainDiff.get(pos.TrainId).DestinationStationCode.equals(pos.DestinationStationCode)){
+                writeToInflux(pos.DestinationStationCode, pos.DirectionNum,
+                        System.currentTimeMillis() - trainDiff.get(pos.TrainId).time);
             }
         }
 
-        List<String> seen = positionsList.stream().map(s->s.TrainId).collect(Collectors.toList());
-        Map<String, TrainMetaData> temp = new HashMap<>();
-        for (String dest : seen) {
-            if (trainDiff.get(dest) != null) {
-                temp.put(dest, trainDiff.get(dest));
-            } else {
-                temp.put(dest, new TrainMetaData(dest));
+        //train pop in and out of existence
+        for (TrainPosition pos : positionsList) {
+            if (trainDiff.get(pos.TrainId) == null ||//new train
+                    !trainDiff.get(pos.TrainId).DestinationStationCode.equals(pos.DestinationStationCode)) { //new station
+                trainDiff.put(pos.TrainId, new TrainMetaData(pos.TrainId));
             }
         }
-        trainDiff = temp;
     }
 
     public void setNewTrainDiff(List<TrainPosition> positions) {
@@ -78,6 +85,11 @@ public class Service {
 
         public TrainMetaData(String destinationStationCode) {
             this.DestinationStationCode = destinationStationCode;
+        }
+
+        public TrainMetaData(String destinationStationCode, long time) {
+            this.DestinationStationCode = destinationStationCode;
+            this.time = time;
         }
     }
 
